@@ -1,13 +1,26 @@
+# Python
 __pycache__/
 *.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+
+# Virtual env
 .venv/
 venv/
-gc/.venv/
+
+# Logs / outputs
+actores/log_actor_*.txt
+actores/*.out
 *.log
-log_actor_*.txt
-logs/
+*.pid
+
+# Env (secretos)
 .env
-.DS_Store
-Thumbs.db
+!.env.example
+
+# OS/IDE
 .vscode/
 .idea/
+.DS_Store
+Thumbs.db
