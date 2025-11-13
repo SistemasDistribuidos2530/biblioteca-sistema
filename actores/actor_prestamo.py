@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
-# archivo: actores/actor_renovacion.py
+# archivo: actores/actor_prestamo.py
 #
-# Actor de RENOVACIÓN. Suscrito al tópico "Renovacion".
-# Lee gc/ga_activo.txt por cada mensaje, calcula nueva fecha (+14 días)
-# y envía payload síncrono al GA activo.
+# Actor de PRÉSTAMO. Suscrito al tópico "Prestamo".
+# Lee gc/ga_activo.txt por cada mensaje y envía al GA activo:
+#   {"operacion":"prestamo","book_code":...,"user_id":...}
+# Espera respuesta síncrona del GA y la registra en log_actor_prestamo.txt.
 
 import zmq
 import json
 import signal
 import sys
 import os
-import time
-from datetime import datetime, timedelta
+from datetime import datetime
 
 # ---------- Configuración ----------
 DIRECCION_GC_PUB = "tcp://127.0.0.1:5556"
-TOPICO_SUSCRIPCION = "Renovacion"
-ARCHIVO_LOG = "log_actor_renovacion.txt"
+TOPICO_SUSCRIPCION = "Prestamo"
+ARCHIVO_LOG = "log_actor_prestamo.txt"
 FILE_GA_ACTIVO = "gc/ga_activo.txt"
 GA_PRIMARY = "tcp://localhost:6000"
 GA_SECONDARY = "tcp://localhost:6001"
@@ -84,7 +84,7 @@ def contactar_ga(payload: dict):
 
 def banner_inicio():
     print("\n" + "=" * 72)
-    print(" ACTOR DE RENOVACIÓN — SUSCRIPCIÓN PUB/SUB ".center(72, " "))
+    print(" ACTOR DE PRÉSTAMO — SUSCRIPCIÓN PUB/SUB ".center(72, " "))
     print("-" * 72)
     print(f"  Tópico        : {TOPICO_SUSCRIPCION}")
     print(f"  Dirección PUB : {DIRECCION_GC_PUB}")
@@ -92,7 +92,7 @@ def banner_inicio():
     print(f"  GA activo     : {leer_ga_activo()} -> {ga_addr_actual()}")
     print("=" * 72 + "\n")
 
-def print_bloque_renovacion(datos: dict, nueva_fecha: str, respuesta_ga: dict):
+def print_bloque_prestamo(datos: dict, respuesta_ga: dict):
     operacion     = datos.get("operacion", "N/A")
     codigo_libro  = datos.get("book_code", "N/A")
     id_usuario    = datos.get("user_id", "N/A")
@@ -101,29 +101,28 @@ def print_bloque_renovacion(datos: dict, nueva_fecha: str, respuesta_ga: dict):
     procesado_ts  = iso()
 
     print("-" * 72)
-    print(" RENOVACIÓN PROCESADA ".center(72, " "))
+    print(" PRÉSTAMO PROCESADO ".center(72, " "))
     print("-" * 72)
-    print(f"  Operación     : {operacion}")
-    print(f"  Usuario       : {id_usuario}")
-    print(f"  Libro         : {codigo_libro}")
-    print(f"  Recibido GC   : {recv_ts}")
-    print(f"  Publicado     : {published_ts}")
-    print(f"  Nueva fecha   : {nueva_fecha}")
-    print(f"  Procesado     : {procesado_ts}")
-    print(f"  GA respuesta  : {respuesta_ga}")
+    print(f"  Operación   : {operacion}")
+    print(f"  Usuario     : {id_usuario}")
+    print(f"  Libro       : {codigo_libro}")
+    print(f"  Recibido GC : {recv_ts}")
+    print(f"  Publicado   : {published_ts}")
+    print(f"  Procesado   : {procesado_ts}")
+    print(f"  GA respuesta: {respuesta_ga}")
     print("-" * 72 + "\n")
 
     mensaje_log = (
-        "RENOVACION PROCESADA | "
+        "PRESTAMO PROCESADO | "
         f"Usuario={id_usuario} | Libro={codigo_libro} | RecibidoGC={recv_ts} | "
-        f"Publicado={published_ts} | NuevaFecha={nueva_fecha} | Procesado={procesado_ts} | GA={respuesta_ga}"
+        f"Publicado={published_ts} | Procesado={procesado_ts} | GA={respuesta_ga}"
     )
     escribir_log(mensaje_log)
 
 # ---------- Manejo señales ----------
 def manejar_senal(sig, frame):
     global EJECUTANDO
-    print(f"\n[{iso()}] Señal recibida ({sig}). Deteniendo Actor Renovación...\n")
+    print(f"\n[{iso()}] Señal recibida ({sig}). Deteniendo Actor Préstamo...\n")
     EJECUTANDO = False
 
 signal.signal(signal.SIGINT, manejar_senal)
@@ -131,7 +130,7 @@ signal.signal(signal.SIGTERM, manejar_senal)
 
 # ---------- Bucle principal ----------
 banner_inicio()
-escribir_log(f"Actor Renovación iniciado. Suscrito a tópico: {TOPICO_SUSCRIPCION}")
+escribir_log(f"Actor Préstamo iniciado. Suscrito a tópico: {TOPICO_SUSCRIPCION}")
 
 while EJECUTANDO:
     try:
@@ -150,21 +149,18 @@ while EJECUTANDO:
                 escribir_log(f"ERROR_JSON | {e} | Contenido={contenido_json}")
                 continue
 
-            nueva_fecha = (datetime.utcnow() + timedelta(days=14)).isoformat() + "Z"
-
             payload = {
-                "operacion": "renovacion",
+                "operacion": "prestamo",
                 "book_code": datos.get("book_code"),
                 "user_id": datos.get("user_id"),
-                "nueva_fecha": nueva_fecha,
                 "recv_ts": datos.get("recv_ts"),
                 "published_ts": datos.get("published_ts"),
-                "origen": "actor_renovacion",
+                "origen": "actor_prestamo",
                 "procesado_ts": iso(),
             }
 
             respuesta = contactar_ga(payload)
-            print_bloque_renovacion(datos, nueva_fecha, respuesta)
+            print_bloque_prestamo(datos, respuesta)
     except zmq.ZMQError as e:
         print(f"[{iso()}] ZMQError:\n  {e}\n", file=sys.stderr)
         escribir_log(f"ERROR_ZMQ | {e}")
@@ -172,11 +168,11 @@ while EJECUTANDO:
         print(f"[{iso()}] ERROR inesperado:\n  {e}\n", file=sys.stderr)
         escribir_log(f"ERROR_INESPERADO | {e}")
 
-# ---------- Cierre ----------
+# ---------- Cierre ordenado ----------
 try:
     socket_sub.close(linger=0)
     contexto.term()
-    escribir_log("Actor Renovación detenido correctamente")
-    print(f"[{iso()}] Actor Renovación detenido correctamente.\n")
+    escribir_log("Actor Préstamo detenido correctamente")
+    print(f"[{iso()}] Actor Préstamo detenido correctamente.\n")
 except Exception:
     pass

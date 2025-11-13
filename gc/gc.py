@@ -37,6 +37,10 @@ from datetime import datetime
 ENLACE_REP = os.getenv("GC_REP_BIND", "tcp://0.0.0.0:5555")  # REP (PS -> GC)
 ENLACE_PUB = os.getenv("GC_PUB_BIND", "tcp://0.0.0.0:5556")  # PUB (GC -> Actores)
 
+# Dirección fija del Actor de Préstamo (REQ/REP síncrono).
+# El requisito indicaba usar tcp://localhost:5560 o similar.
+ACTOR_PRESTAMO = os.getenv("GC_ACTOR_PRESTAMO", "tcp://localhost:5560")
+
 # ---------- Inicialización de ZeroMQ ----------
 contexto = zmq.Context()                 # Crea contexto global
 
@@ -109,13 +113,17 @@ def print_bloque_error_operacion(operacion_raw):
     print(" OPERACIÓN NO SOPORTADA ".center(72, " "), file=sys.stderr)
     print("-" * 72, file=sys.stderr)
     print(f"  Recibido: '{operacion_raw}'", file=sys.stderr)
-    print(f"  Válidas : devolucion, renovacion", file=sys.stderr)
+    # Mostrar dinámicamente las operaciones válidas actuales.
+    validas = ", ".join(sorted(OPERACIONES_VALIDAS.keys()))
+    print(f"  Válidas : {validas}", file=sys.stderr)
     print("-" * 72 + "\n", file=sys.stderr)
 
 # ---------- Operaciones válidas (mapa de entrada -> tópico) ----------
+# Se añade "prestamo": "Prestamo" aunque NO se publicará vía PUB.
 OPERACIONES_VALIDAS = {
     "devolucion": "Devolucion",
     "renovacion": "Renovacion",
+    "prestamo": "Prestamo",
 }
 
 # ---------- Manejo de señales ----------
@@ -168,6 +176,99 @@ while EJECUTANDO:
                 print_bloque_error_operacion(operacion_raw=operacion)
                 continue  # No publica nada
 
+            # ---------- Manejo especial: PRESTAMO (síncrono con actor) ----------
+            if operacion == "prestamo":
+                # No enviar respuesta inmediata "Operacion aceptada".
+                # Crear socket REQ temporal, conectarlo al actor de prestamo,
+                # enviar la carga JSON y esperar respuesta. Luego reenviar
+                # la respuesta del actor al PS. En caso de error/timeouts,
+                # responder con un mensaje de error JSON y continuar.
+                req_socket = None
+                try:
+                    req_socket = contexto.socket(zmq.REQ)
+                    # Timeouts razonables para no bloquear indefinidamente.
+                    req_socket.setsockopt(zmq.RCVTIMEO, 5000)  # 5s recv timeout
+                    req_socket.setsockopt(zmq.SNDTIMEO, 5000)  # 5s send timeout
+                    req_socket.connect(ACTOR_PRESTAMO)
+
+                    # Enviar al actor de prestamo la carga como JSON string.
+                    # Usamos la versión dict -> JSON aqui.
+                    payload_al_actor = json.dumps(solicitud)
+                    req_socket.send_string(payload_al_actor)
+
+                    # Esperar respuesta del actor.
+                    try:
+                        respuesta_actor = req_socket.recv_string()
+                    except zmq.ZMQError as e_recv:
+                        # Timeout o error de recv
+                        error_msg = f"Timeout/recv error al contactar actor de prestamo: {e_recv}"
+                        print(f"[{iso()}] {error_msg}\n", file=sys.stderr)
+                        socket_rep.send_string(construir_respuesta(
+                            estado="error",
+                            mensaje="Error comunicando con actor de prestamo",
+                            informacion={"detalle": str(e_recv)},
+                        ))
+                        # Log legible
+                        print_bloque_solicitud(
+                            operacion=operacion,
+                            codigo_libro=codigo_libro,
+                            id_usuario=id_usuario,
+                            recibido_ts=recibido_ts,
+                            topico="Prestamo (REQ->GA) - ERROR",
+                        )
+                        continue  # seguir loop principal
+
+                    # Si llegamos aquí, tenemos una respuesta del actor.
+                    # Reenviarla tal cual al PS como respuesta final.
+                    # Asumimos que el actor devuelve una cadena JSON.
+                    socket_rep.send_string(respuesta_actor)
+
+                    # Reporte legible por consola.
+                    print_bloque_solicitud(
+                        operacion=operacion,
+                        codigo_libro=codigo_libro,
+                        id_usuario=id_usuario,
+                        recibido_ts=recibido_ts,
+                        topico="Prestamo (REQ->GA)",
+                    )
+
+                except zmq.ZMQError as e:
+                    # Errores de conexión o send de ZMQ.
+                    print(f"[{iso()}] ZMQError al manejar prestamo:\n  {e}\n", file=sys.stderr)
+                    try:
+                        socket_rep.send_string(construir_respuesta(
+                            estado="error",
+                            mensaje="Error comunicando con actor de prestamo",
+                            informacion={"detalle": str(e)},
+                        ))
+                    except Exception:
+                        # Si enviar la respuesta falla, imprimir y continuar.
+                        print(f"[{iso()}] No se pudo enviar respuesta de error al PS.\n", file=sys.stderr)
+
+                except Exception as e:
+                    # Error genérico.
+                    print(f"[{iso()}] ERROR inesperado manejando prestamo:\n  {e}\n", file=sys.stderr)
+                    try:
+                        socket_rep.send_string(construir_respuesta(
+                            estado="error",
+                            mensaje="Error inesperado en GC durante prestamo",
+                            informacion={"detalle": str(e)},
+                        ))
+                    except Exception:
+                        print(f"[{iso()}] No se pudo enviar respuesta de error al PS.\n", file=sys.stderr)
+
+                finally:
+                    # Cerrar el socket REQ temporal correctamente.
+                    try:
+                        if req_socket is not None:
+                            req_socket.close(linger=0)
+                    except Exception:
+                        pass
+
+                # Después de atender "prestamo", continuar con el loop principal.
+                continue
+
+            # ---------- Caso general: devolucion / renovacion ----------
             # Respuesta inmediata al PS (aceptada).
             socket_rep.send_string(construir_respuesta(
                 estado="ok",
