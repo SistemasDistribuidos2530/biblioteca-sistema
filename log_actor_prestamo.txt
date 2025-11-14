@@ -1,2 +1,4 @@
 [2025-11-13T15:04:08.154137Z] Actor Préstamo iniciado. Suscrito a tópico: Prestamo
 [2025-11-13T15:05:03.911904Z] Actor Préstamo detenido correctamente
+[2025-11-14T02:08:51.036454Z] Actor Préstamo iniciado. Suscrito a tópico: Prestamo
+[2025-11-14T05:18:01.332656Z] Actor Préstamo iniciado. Suscrito a tópico: Prestamo
