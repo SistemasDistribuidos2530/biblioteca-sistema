@@ -26,7 +26,11 @@ from datetime import datetime
 
 # ----------------- Configuración por defecto (se pueden override con env) -----------------
 ROLE = os.getenv("GA_ROLE", "primary").lower()   # 'primary' or 'secondary'
-GA_BIND = os.getenv("GA_BIND", "tcp://0.0.0.0:6000")
+# Determinar bind según rol: primary usa 6000, secondary usa 6001
+if ROLE == "secondary":
+    GA_BIND = os.getenv("GA_SECONDARY_BIND", os.getenv("GA_BIND", "tcp://0.0.0.0:6001"))
+else:
+    GA_BIND = os.getenv("GA_PRIMARY_BIND", os.getenv("GA_BIND", "tcp://0.0.0.0:6000"))
 DB_FILE = os.getenv("GA_DB_FILE", f"gc/ga_db_{ROLE}.pkl")
 WAL_FILE = os.getenv("GA_WAL_FILE", f"gc/ga_wal_{ROLE}.log")
 REPL_PUSH_ADDR = os.getenv("GA_REPL_PUSH_ADDR", "tcp://localhost:7001")   # uso en primary
