@@ -313,6 +313,25 @@ Resultados referenciales (depende hardware):
 | `gc/ga_activo.txt` | Monitor | Estado actual GA |
 
 ---
+## 🌐 Despliegue por máquinas y repositorios
+
+Para la entrega final se usan dos repos separados y tres máquinas:
+
+- M1 — Thomas (Sede 1, Primary GA + GC + Actores) — IP: 10.43.101.220
+  - Repo a clonar en M1: https://github.com/SistemasDistribuidos2530/biblioteca-sistema
+  - `.env` en M1: `GA_ROLE=primary`
+- M2 — Santiago (Sede 2, Secondary GA + GC + Actores) — IP: 10.43.102.248
+  - Repo a clonar en M2: https://github.com/SistemasDistribuidos2530/biblioteca-sistema
+  - `.env` en M2: `GA_ROLE=secondary`
+- M3 — Diego (Clientes: PS, Seguridad, Experimentos) — IP: 10.43.102.38
+  - Repo a clonar en M3: https://github.com/SistemasDistribuidos2530/biblioteca-clientes
+  - `.env` en M3 (en el repo clientes): `GC_ADDR=tcp://10.43.101.220:5555` (apunta a M1)
+
+Guías operativas:
+- Paso a paso (terminal por terminal): `../PASO_A_PASO_MULTI_MAQUINA.md`
+- Ejecución y escenarios: `../EJECUCION.md`
+
+---
 ## 🧭 Multi-Máquina (Resumen rápido)
 | Paso | M1 | M2 |
 |------|----|----|
