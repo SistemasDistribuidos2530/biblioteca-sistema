@@ -22,6 +22,7 @@ logs/
 gc/ga_db_*.pkl
 gc/ga_wal_*.log
 gc/ga_activo.txt
+*.bin
 
 # Env (secretos)
 .env
