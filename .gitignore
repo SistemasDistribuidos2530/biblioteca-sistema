@@ -12,8 +12,15 @@ venv/
 # Logs / outputs
 actores/log_actor_*.txt
 actores/*.out
+logs/
+.pids/
 *.log
 *.pid
+
+# Base de datos y WAL generados
+gc/ga_db_*.pkl
+gc/ga_wal_*.log
+gc/ga_activo.txt
 
 # Env (secretos)
 .env
