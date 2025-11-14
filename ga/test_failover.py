@@ -4,11 +4,20 @@
 # Script para simular fallos del Gestor Administrador (GA)
 # - Mata el proceso del GA primario o secundario
 # - Limpia base de datos para probar replay WAL
+# - Mide MTTD (Mean Time To Detect) y MTTR (Mean Time To Recover)
 
 import os
 import signal
 import time
-import psutil  # pip install psutil
+import json
+from datetime import datetime
+try:
+    import psutil  # pip install psutil
+except ImportError:
+    print("psutil no instalado. Instalando...")
+    import subprocess
+    subprocess.check_call(["pip", "install", "psutil"])
+    import psutil
 
 def kill_by_port(port):
     """Encuentra y termina procesos que usan un puerto."""
@@ -65,7 +74,7 @@ def simulate_failover():
             print("Saliendo del simulador")
             break
         else:
-            print("❌ Opción inválida")
+            print("Opción inválida")
 
 if __name__ == "__main__":
     simulate_failover()
