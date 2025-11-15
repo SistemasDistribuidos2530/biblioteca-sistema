@@ -447,118 +447,49 @@ cat experimentos/experimento_carga.md
 
 ---
 
-## 🚨 Troubleshooting
+## 🔎 Pre‑Check rápido (Sistema)
 
-### Problema: Puerto 5555 no escucha en M1
+Validar que los puertos esperados estén en LISTEN tras arrancar:
 
-**Solución:**
+### M1
 ```bash
-# Verificar que start_site1.sh se ejecutó
-pgrep -f gc/gc.py
+ss -tnlp | grep -E ':5555|:5556|:6000' || echo "GC/GA no están arriba en M1"
+```
 
-# Si no hay PID, revisar logs
-tail -n30 logs/gc_multihilo.log
-
-# Reintentar
-bash scripts/stop_all.sh
-bash scripts/start_site1.sh
+### M2
+```bash
+ss -tnlp | grep -E ':5555|:5556|:6001' || echo "GC/GA no están arriba en M2"
 ```
 
 ---
+## 🧹 Reset total (dejar en cero)
 
-### Problema: Puerto 6001 no aparece en M2
-
-**Causa:** GA no usa puerto correcto por rol
-
-**Solución:**
+### M1 — Sede 1 (Primary)
 ```bash
-# Verificar que .env tiene GA_ROLE=secondary
-grep GA_ROLE= .env
+cd ~/ProyectoDistribuidos/biblioteca-sistema
+bash scripts/stop_all.sh || true
+pkill -f "python3 ga/ga.py" 2>/dev/null || true
+pkill -f "python3 gc/gc.py" 2>/dev/null || true
+pkill -f "python3 gc/gc_multihilo.py" 2>/dev/null || true
+pkill -f "python3 actores/" 2>/dev/null || true
+pkill -f "python3 gc/monitor_failover.py" 2>/dev/null || true
+rm -rf .pids/* logs/* 2>/dev/null || true
+ss -tnlp | grep -E ':5555|:5556|:6000' || echo "✓ Puertos liberados en M1"
+```
 
-# Relanzar
-bash scripts/stop_all.sh
-bash scripts/start_site2.sh
-ss -tnlp | grep 6001  # Ahora debe aparecer
+### M2 — Sede 2 (Secondary)
+```bash
+cd ~/Desktop/DistribuidosProyecto/biblioteca-sistema
+bash scripts/stop_all.sh || true
+pkill -f "python3 ga/ga.py" 2>/dev/null || true
+pkill -f "python3 gc/gc.py" 2>/dev/null || true
+pkill -f "python3 gc/gc_multihilo.py" 2>/dev/null || true
+pkill -f "python3 actores/" 2>/dev/null || true
+pkill -f "python3 gc/monitor_failover.py" 2>/dev/null || true
+rm -rf .pids/* logs/* 2>/dev/null || true
+ss -tnlp | grep -E ':5555|:5556|:6001' || echo "✓ Puertos liberados en M2"
 ```
 
 ---
-
-### Problema: M3 no conecta a M1 (nc falla)
-
-**Solución:**
-```bash
-# M1: Abrir firewall
-sudo ufw allow 5555/tcp
-sudo ufw allow 5556/tcp
-
-# M3: Verificar IP en .env
-grep GC_ADDR= .env  # Debe ser tcp://10.43.101.220:5555
-
-# Reintentar
-nc -vz 10.43.101.220 5555
-```
-
----
-
-### Problema: git pull con conflictos de logs
-
-**M2:**
-```bash
-rm -f log_actor_*.txt actores/log_actor_*.txt
-git pull
-```
-
-**M3:**
-```bash
-rm -rf logs/ multi_ps_logs/ experimentos/
-rm -f solicitudes*.bin ps_logs.txt
-git pull
-```
-
----
-
-### Problema: Procesos quedan huérfanos
-
-**Solución:**
-```bash
-# Ver todos los procesos Python
-pgrep -f python3
-
-# Detener específico
-pkill -f ga/ga.py
-pkill -f gc/gc.py
-pkill -f actores/
-
-# Detener TODOS (nuclear)
-pkill -f python3
-```
-
----
-
-## 📚 Archivos Clave
-
-| Archivo | Descripción |
-|---------|-------------|
-| `README.md` | Documentación principal del proyecto |
-| `INICIO_RAPIDO.md` | Esta guía (inicio rápido + demo completa) |
-| `.env.example` | Plantilla de configuración |
-| `requirements.txt` | Dependencias Python |
-
----
-
-## 🎯 Flujo Recomendado
-
-### Para arrancar rápido:
-1. **Leer:** `README.md` (3 min)
-2. **Seguir:** Este archivo → Sección "Inicio Automático"
-3. **Ejecutar:** Scripts en M1, M2, M3
-
-### Para demo completa:
-1. **Seguir:** Sección "Demo Completa 3 Máquinas" (arriba)
-2. **Validar:** Cada paso con comandos de verificación
-
----
-
-**Documentación completa:** Ver `README.md` en cada repositorio  
-**Última actualización:** 14 noviembre 2025
-
+# ...existing code...
+````
