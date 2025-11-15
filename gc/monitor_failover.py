@@ -18,9 +18,11 @@ import sys
 import logging
 from datetime import datetime
 
-# ---------- Configuración fija ----------
-GA_PRIMARY_ADDR = "tcp://localhost:6000"
-GA_SECONDARY_ADDR = "tcp://localhost:6001"
+# ---------- Configuración desde entorno ----------
+# Direcciones del GA primario (M1) y secundario (M2)
+# Por defecto: primary en M1 (10.43.101.220:6000), secondary local o en M2
+GA_PRIMARY_ADDR = os.getenv("GA_PRIMARY_ADDR", "tcp://10.43.101.220:6000")
+GA_SECONDARY_ADDR = os.getenv("GA_SECONDARY_ADDR", "tcp://localhost:6001")
 FILE_STATUS = "gc/ga_activo.txt"
 LOG_DIR = "logs"
 LOG_FILE = os.path.join(LOG_DIR, "monitor_failover.log")

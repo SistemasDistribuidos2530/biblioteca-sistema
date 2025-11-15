@@ -493,3 +493,93 @@ ss -tnlp | grep -E ':5555|:5556|:6001' || echo "✓ Puertos liberados en M2"
 ---
 # ...existing code...
 ````
+## 🚨 Troubleshooting
+### Problema: Puerto ya en uso (Address already in use)
+**Error:**
+```
+zmq.error.ZMQError: Address already in use (addr='tcp://0.0.0.0:6000')
+```
+**Causa:** Ya hay un proceso usando ese puerto (levantado por scripts o manualmente)
+**Solución:**
+```bash
+# Ver qué proceso usa el puerto
+ss -tnlp | grep ':6000'
+# Opción 1: Parar todo ordenadamente (RECOMENDADO)
+bash scripts/stop_all.sh
+# Opción 2: Forzar liberación del puerto
+fuser -k 6000/tcp 2>/dev/null || true
+# Verificar que quedó libre
+ss -tnlp | grep ':6000' || echo "✓ Puerto 6000 libre"
+```
+**Prevención:** Usa `stop_all.sh` antes de lanzar procesos manualmente
+---
+### Problema: Monitor failover no conecta al GA primary
+**Síntomas:**
+```
+Timeout/recv error esperando pong: Resource temporarily unavailable
+GA primario no responde. Usando secundario (tcp://localhost:6001)
+```
+**Causa:** Monitor usa `localhost` en lugar de IP de M1
+**Solución:**
+```bash
+# M2: Exportar dirección correcta antes de lanzar monitor
+export GA_PRIMARY_ADDR=tcp://10.43.101.220:6000
+export GA_SECONDARY_ADDR=tcp://localhost:6001
+python3 gc/monitor_failover.py
+```
+O mejor aún, usa el script de arranque que ya configura esto:
+```bash
+bash scripts/start_site2.sh
+```
+---
+**Última actualización:** 15 noviembre 2025
+---
+## 🔍 Ver Monitor Failover en Vivo
+Para ver el monitor en tiempo real (en lugar de background):
+### M1 o M2:
+```bash
+cd ~/ProyectoDistribuidos/biblioteca-sistema  # o tu ruta en M2
+bash scripts/run_monitor_interactive.sh
+```
+**Salida esperada (M1 activo):**
+```
+==========================================
+  MONITOR FAILOVER - MODO INTERACTIVO
+==========================================
+Rol detectado: primary
+Presiona Ctrl+C para detener
+==========================================
+📡 Monitoreando GA Primary local: tcp://localhost:6000
+🔄 Fallback a GA Secondary en M2: tcp://10.43.102.248:6001
+Iniciando monitor...
+==========================================
+[2025-11-15T...Z] GA primario activo (tcp://localhost:6000)
+```
+**Para simular failover en vivo:**
+1. Abre otra terminal en M1
+2. Ejecuta: `pkill -f ga/ga.py`
+3. El monitor mostrará en tiempo real:
+   ```
+   [2025-11-15T...Z] GA primario no responde, conmutando a secundario
+   [2025-11-15T...Z] Estado GA actualizado a 'secondary'
+   ```
+---
+## 🗄️ Restaurar Base de Datos
+Si borraste la BD, regenerarla con el script:
+```bash
+cd ~/ProyectoDistribuidos/biblioteca-sistema
+python3 scripts/generate_db.py --seed 42 --num-libros 1000 --prestados-sede1 50 --prestados-sede2 150
+# Verificar
+ls -lh gc/ga_db_*.pkl gc/ga_wal_*.log
+```
+**Archivos generados:**
+- `gc/ga_db_primary.pkl` (~63KB)
+- `gc/ga_db_secondary.pkl` (~63KB)
+- `gc/ga_wal_primary.log` (vacío inicial)
+- `gc/ga_wal_secondary.log` (vacío inicial)
+**Contenido de la BD:**
+- 1000 libros totales
+- 50 prestados en Sede 1
+- 150 prestados en Sede 2
+- Semilla 42 (reproducible)
+---
