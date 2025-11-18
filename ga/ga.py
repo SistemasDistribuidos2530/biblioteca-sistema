@@ -265,16 +265,23 @@ def main():
             # --------------- requests (actors / monitor) ---------------
             if rep in events:
                 raw = rep.recv_string()
+                try:
+                    print(f"[{iso()}] REP recibido: {raw[:120]}")
+                except Exception:
+                    pass
                 # ping from monitor
                 if isinstance(raw, str) and raw.strip().lower() == "ping":
-                    rep.send_string("pong")
+                    try:
+                        rep.send_string("pong")
+                        print(f"[{iso()}] RESPUESTA PING -> pong")
+                    except Exception as e:
+                        print(f"[{iso()}] ERROR enviando pong: {e}", file=sys.stderr)
                     continue
 
                 # otherwise expect JSON payload for operation
                 try:
                     payload = json.loads(raw)
                 except Exception:
-                    # malformed -> error reply
                     rep.send_string(json.dumps({"estado":"error","mensaje":"payload no JSON"}))
                     continue
 

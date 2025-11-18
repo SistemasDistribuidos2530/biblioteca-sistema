@@ -118,55 +118,75 @@ signal.signal(signal.SIGINT, handle_signal)
 signal.signal(signal.SIGTERM, handle_signal)
 
 # ---------- Lógica principal ----------
+
+def _primary_candidates():
+    # Construir lista de direcciones candidatas para el ping primario (manejo IPv4/IPv6)
+    addrs = []
+    addrs.append(GA_PRIMARY_ADDR)
+    try:
+        # Si host es localhost, añadir 127.0.0.1:port
+        if GA_PRIMARY_ADDR.startswith("tcp://"):
+            hostport = GA_PRIMARY_ADDR[len("tcp://"):]
+            host, port = hostport.rsplit(":", 1)
+            if host in ("localhost", "127.0.0.1"):
+                addrs.append(f"tcp://127.0.0.1:{port}")
+                addrs.append(f"tcp://localhost:{port}")
+    except Exception:
+        pass
+    # Quitar duplicados preservando orden
+    seen = set(); uniq = []
+    for a in addrs:
+        if a not in seen:
+            uniq.append(a); seen.add(a)
+    return uniq
+
 def ping_primary_once(logger):
     """
     Intenta enviar 'ping' al GA primario y recibir 'pong'.
     Retorna True si recibió 'pong', False en caso contrario.
-    Este método crea y cierra un socket REQ por intento para mantener estado consistente.
+    Intenta también un fallback a 127.0.0.1 si la dirección es localhost.
     """
     ctx = zmq.Context.instance()
-    sock = None
-    try:
-        sock = ctx.socket(zmq.REQ)
-        sock.setsockopt(zmq.RCVTIMEO, REQ_TIMEOUT_MS)
-        sock.setsockopt(zmq.SNDTIMEO, REQ_TIMEOUT_MS)
-        sock.connect(GA_PRIMARY_ADDR)
-
-        # Enviar ping
+    for addr in _primary_candidates():
+        sock = None
         try:
-            sock.send_string("ping")
-        except zmq.ZMQError as e:
-            logger.error(f"{iso()} Error enviando ping: {e}")
-            return False
-
-        # Esperar pong
-        try:
-            reply = sock.recv_string()
-        except zmq.ZMQError as e:
-            logger.warning(f"{iso()} Timeout/recv error esperando pong: {e}")
-            return False
-
-        # Comprobar respuesta
-        if isinstance(reply, str) and reply.strip().lower() == "pong":
-            return True
-        else:
-            logger.warning(f"{iso()} Respuesta inesperada del primario: {reply!r}")
-            return False
-
-    except Exception as e:
-        logger.error(f"{iso()} Excepción en ping_primary_once: {e}")
-        return False
-
-    finally:
-        if sock is not None:
+            sock = ctx.socket(zmq.REQ)
+            sock.setsockopt(zmq.RCVTIMEO, REQ_TIMEOUT_MS)
+            sock.setsockopt(zmq.SNDTIMEO, REQ_TIMEOUT_MS)
+            sock.connect(addr)
+            logger.info(f"{iso()} Intentando ping a {addr}")
             try:
-                sock.close(linger=0)
-            except Exception:
-                pass
+                sock.send_string("ping")
+            except zmq.ZMQError as e:
+                logger.error(f"{iso()} Error enviando ping a {addr}: {e}")
+                continue
+            try:
+                reply = sock.recv_string()
+            except zmq.ZMQError as e:
+                logger.warning(f"{iso()} Timeout/recv error esperando pong desde {addr}: {e}")
+                continue
+            if isinstance(reply, str) and reply.strip().lower() == "pong":
+                logger.info(f"{iso()} Pong recibido desde {addr}")
+                return True
+            else:
+                logger.warning(f"{iso()} Respuesta inesperada desde {addr}: {reply!r}")
+        except Exception as e:
+            logger.error(f"{iso()} Excepción en ping a {addr}: {e}")
+        finally:
+            if sock is not None:
+                try:
+                    sock.close(linger=0)
+                except Exception:
+                    pass
+    return False
 
 def main():
     ensure_dirs()
     logger = setup_logger()
+
+    # Log de configuración efectiva para diagnóstico
+    logger.info(f"{iso()} Monitor iniciado con GA_PRIMARY_ADDR={GA_PRIMARY_ADDR} GA_SECONDARY_ADDR={GA_SECONDARY_ADDR} FILE_STATUS={FILE_STATUS}")
+    print(f"[{iso()}] Monitor: PRIMARY={GA_PRIMARY_ADDR} SECONDARY={GA_SECONDARY_ADDR} status_file={FILE_STATUS}")
 
     # Estado interno para detección de fallos/recuperación
     consecutive_failures = 0

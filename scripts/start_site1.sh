@@ -13,6 +13,9 @@ export GC_PUB_BIND=${GC_PUB_BIND:-tcp://0.0.0.0:5556}
 export GC_ACTOR_PRESTAMO=${GC_ACTOR_PRESTAMO:-tcp://localhost:5560}
 export GA_PRIMARY_BIND=${GA_PRIMARY_BIND:-tcp://0.0.0.0:6000}
 export GA_SECONDARY_BIND=${GA_SECONDARY_BIND:-tcp://0.0.0.0:6001}
+# Direcciones que usará el monitor_failover en M1
+export GA_PRIMARY_ADDR=${GA_PRIMARY_ADDR:-tcp://localhost:6000}
+export GA_SECONDARY_ADDR=${GA_SECONDARY_ADDR:-tcp://10.43.102.248:6001}
 
 echo "== Iniciando SEDE 1 (Primary) =="
 
@@ -24,6 +27,8 @@ python3 gc/gc_multihilo.py > "$LOG_DIR/gc_multihilo.log" 2>&1 & echo $! > "$PID_
 python3 actores/actor_renovacion.py > "$LOG_DIR/actor_renovacion.log" 2>&1 & echo $! > "$PID_DIR/actor_renovacion.pid"
 python3 actores/actor_devolucion.py > "$LOG_DIR/actor_devolucion.log" 2>&1 & echo $! > "$PID_DIR/actor_devolucion.pid"
 python3 actores/actor_prestamo.py > "$LOG_DIR/actor_prestamo.log" 2>&1 & echo $! > "$PID_DIR/actor_prestamo.pid"
+# Pequeña espera para asegurar que GA ya está escuchando
+sleep 1
 python3 gc/monitor_failover.py > "$LOG_DIR/monitor_failover.log" 2>&1 & echo $! > "$PID_DIR/monitor_failover.pid"
 
 echo "Componentes iniciados. PIDs en $PID_DIR"
