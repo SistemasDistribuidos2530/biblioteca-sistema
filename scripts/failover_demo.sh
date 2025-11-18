@@ -88,6 +88,25 @@ else
     log_success "Monitor de failover corriendo"
 fi
 
+# Validar estado inicial (debe ser primary)
+if [ -f "gc/ga_activo.txt" ]; then
+    ESTADO_INICIAL=$(cat gc/ga_activo.txt)
+    if [ "$ESTADO_INICIAL" != "primary" ]; then
+        log_error "Sistema NO está en estado 'primary' (actual: $ESTADO_INICIAL)"
+        log_error "Para ejecutar la demo, el GA primario debe estar arriba."
+        echo
+        echo "Soluciones:"
+        echo "  1. Reiniciar el GA primario:"
+        echo "     bash scripts/stop_all.sh"
+        echo "     bash scripts/start_site1.sh"
+        echo
+        echo "  2. Esperar ~10s a que el monitor detecte el primario y conmute"
+        echo
+        exit 1
+    fi
+    log_success "Estado inicial: $ESTADO_INICIAL ✓"
+fi
+
 echo
 sleep 2
 
@@ -134,9 +153,27 @@ sleep 2
 
 log "FASE 3: Iniciando carga de fondo para medir impacto..."
 
-cd "$DEMO_DIR/biblioteca-clientes" || exit 1
+# Encontrar directorio de clientes (puede estar en diferentes ubicaciones)
+if [ -d "$DEMO_DIR/../biblioteca-clientes" ]; then
+    CLIENTES_DIR="$DEMO_DIR/../biblioteca-clientes"
+elif [ -d "/home/estudiante/biblioteca-clientes" ]; then
+    CLIENTES_DIR="/home/estudiante/biblioteca-clientes"
+elif [ -d "/home/estudiante/ProyectoDistribuidos/biblioteca-clientes" ]; then
+    CLIENTES_DIR="/home/estudiante/ProyectoDistribuidos/biblioteca-clientes"
+else
+    log_error "No se encuentra biblioteca-clientes. Saltando carga de fondo..."
+    CLIENTES_DIR=""
+fi
 
-# Lanzar multi_ps en background
+if [ -n "$CLIENTES_DIR" ]; then
+    cd "$CLIENTES_DIR" || exit 1
+    log_success "Directorio clientes: $CLIENTES_DIR"
+else
+    log_warn "Continuando sin carga de fondo..."
+fi
+
+# Lanzar multi_ps en background (solo si hay directorio de clientes)
+if [ -n "$CLIENTES_DIR" ]; then
 (
     python3 pruebas/multi_ps.py --num-ps 2 --requests-per-ps 50 --mix 50:50:0 \
         > "$EVIDENCE_DIR/carga_durante_failover.log" 2>&1
@@ -147,8 +184,13 @@ log_success "Carga lanzada en background (PID: $CARGA_PID)"
 
 # Dar tiempo a que empiecen a enviar solicitudes
 sleep 3
+else
+    CARGA_PID=""
+    log_warn "Saltando carga de fondo (sin directorio clientes)"
+    sleep 1
+fi
 
-cd "$DEMO_DIR/biblioteca-sistema" || exit 1
+cd "$DEMO_DIR/biblioteca-sistema" || cd "$DEMO_DIR" || exit 1
 
 # ============================================================================
 # FASE 4: SIMULAR CAÍDA DEL GA PRIMARIO
@@ -246,9 +288,13 @@ echo
 
 log "FASE 7: Esperando a que la carga de prueba termine..."
 
-wait $CARGA_PID 2>/dev/null || log_warn "Carga terminó con errores (esperado durante failover)"
-
-log_success "Carga completada"
+if [ -n "$CARGA_PID" ]; then
+    wait $CARGA_PID 2>/dev/null || log_warn "Carga terminó con errores (esperado durante failover)"
+    log_success "Carga completada"
+else
+    log_warn "No había carga de fondo activa"
+    sleep 5  # Esperar un poco para dar tiempo al monitor
+fi
 echo
 
 # ============================================================================
@@ -277,9 +323,10 @@ for actor in renovacion devolucion prestamo; do
 done
 
 # Capturar métricas de la carga
-cd "$DEMO_DIR/biblioteca-clientes" || exit 1
+if [ -n "$CLIENTES_DIR" ] && [ -d "$CLIENTES_DIR" ]; then
+    cd "$CLIENTES_DIR" || true
 
-if [ -f "multi_ps_logs/ps_logs_consolidado.txt" ]; then
+    if [ -f "multi_ps_logs/ps_logs_consolidado.txt" ]; then
     cp multi_ps_logs/ps_logs_consolidado.txt "$EVIDENCE_DIR/metricas_clientes.txt"
 
     # Analizar impacto
@@ -302,9 +349,10 @@ TIMEOUT: $TIMEOUT
 ERROR: $ERROR
 Tasa de éxito: $(echo "scale=2; $OK * 100 / $TOTAL" | bc)%
 RESUMEN
+    fi
 fi
 
-cd "$DEMO_DIR/biblioteca-sistema" || exit 1
+cd "$DEMO_DIR/biblioteca-sistema" || cd "$DEMO_DIR" || exit 1
 
 # ============================================================================
 # FASE 9: Generar reporte consolidado
