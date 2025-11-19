@@ -196,19 +196,33 @@ def main():
     try:
         ok = ping_primary_once(logger)
         if ok:
-            write_status_if_changed("primary", logger)
+            # Forzar escritura inicial siempre (aunque current sea None)
+            try:
+                atomic_write(FILE_STATUS, "primary")
+                logger.info(f"{iso()} Estado GA actualizado a 'primary'")
+                print(f"[{iso()}] Estado GA actualizado a 'primary'")
+            except Exception as e:
+                logger.error(f"{iso()} Error escribiendo estado inicial: {e}")
             currently_primary = True
             logger.info(f"{iso()} GA primario activo ({GA_PRIMARY_ADDR})")
             print(f"[{iso()}] GA primario activo ({GA_PRIMARY_ADDR})")
         else:
-            write_status_if_changed("secondary", logger)
+            try:
+                atomic_write(FILE_STATUS, "secondary")
+                logger.info(f"{iso()} Estado GA actualizado a 'secondary'")
+                print(f"[{iso()}] Estado GA actualizado a 'secondary'")
+            except Exception as e:
+                logger.error(f"{iso()} Error escribiendo estado inicial: {e}")
             currently_primary = False
             logger.info(f"{iso()} GA primario no responde. Usando secundario ({GA_SECONDARY_ADDR})")
             print(f"[{iso()}] GA primario no responde. Usando secundario ({GA_SECONDARY_ADDR})")
             consecutive_failures = FAILURE_THRESHOLD  # estado de fallo
     except Exception as e:
         logger.error(f"{iso()} Error inicial comprobando primario: {e}")
-        write_status_if_changed("secondary", logger)
+        try:
+            atomic_write(FILE_STATUS, "secondary")
+        except Exception:
+            pass
         currently_primary = False
         consecutive_failures = FAILURE_THRESHOLD
 

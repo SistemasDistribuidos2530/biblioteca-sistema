@@ -29,6 +29,12 @@ export GA_SECONDARY_ADDR=${GA_SECONDARY_ADDR:-tcp://localhost:6001}
 echo "== Iniciando SEDE 2 (Secondary) =="
 echo "[INFO] GA_REPL_PULL_BIND=$GA_REPL_PULL_BIND"
 
+# Generar DB secundaria solo si no existe (usar misma semilla que site1 para sincronización inicial)
+if [ ! -f "$ROOT_DIR/gc/ga_db_secondary.pkl" ]; then
+    echo "[INFO] Generando DB secundaria inicial (seed=42)..."
+    python3 scripts/generate_db.py --seed 42 > "$LOG_DIR/generate_db.log" 2>&1 || true
+fi
+
 python3 ga/ga.py > "$LOG_DIR/ga_secondary.log" 2>&1 & echo $! > "$PID_DIR/ga_secondary.pid"
 python3 gc/gc.py > "$LOG_DIR/gc_serial.log" 2>&1 & echo $! > "$PID_DIR/gc_serial.pid"
 python3 gc/gc_multihilo.py > "$LOG_DIR/gc_multihilo.log" 2>&1 & echo $! > "$PID_DIR/gc_multihilo.pid"

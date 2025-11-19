@@ -1,7 +1,0 @@
-Total: 460
-OK: 460
-TIMEOUT: 0
-0
-ERROR: 0
-0
-Tasa de éxito: 100.00%
