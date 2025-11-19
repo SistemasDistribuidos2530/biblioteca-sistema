@@ -21,9 +21,9 @@ except ImportError:
 
 def kill_by_port(port):
     """Encuentra y termina procesos que usan un puerto."""
-    for proc in psutil.process_iter(['pid', 'name', 'connections']):
+    for proc in psutil.process_iter(['pid', 'name']):  # <-- QUITAMOS 'connections'
         try:
-            for conn in proc.connections(kind='inet'):
+            for conn in proc.connections(kind='inet'):  # <-- SE USA AQUÍ
                 if conn.laddr.port == port:
                     print(f"Terminando proceso {proc.pid} ({proc.name()}) en puerto {port}")
                     proc.terminate()

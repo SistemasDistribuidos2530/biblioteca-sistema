@@ -251,12 +251,10 @@ def main():
                         print(f"[{iso()}] Replicacion: payload no JSON: {raw}", file=sys.stderr)
                         continue
                     # apply op directly (we also write to WAL and save DB)
-                    print(f"[{iso()}] Replicacion recibida: {payload.get('op', payload)}")
-                    # payload expected to be wal_entry or op; normalize
+                    print(f"[{iso()}] REPL RECV raw -> {raw[:120]}")
                     op = payload.get("op") if isinstance(payload, dict) and "op" in payload else payload
-                    # write WAL and apply
+                    print(f"[{iso()}] REPL APPLY -> {op.get('operacion')} book={op.get('book_code')} user={op.get('user_id')}")
                     res = process_and_persist(op)
-                    # no reply expected for replication
                 except zmq.Again:
                     pass
                 except Exception as e:
@@ -300,6 +298,7 @@ def main():
                         if repl_push:
                             # envia la misma estructura de WAL para que el secundario escriba su WAL y aplique
                             wal_entry = {"ts": iso(), "op": payload}
+                            print(f"[{iso()}] REPL SEND -> {payload.get('operacion')} book={payload.get('book_code')} user={payload.get('user_id')} to {REPL_PUSH_ADDR}")
                             repl_push.send_string(json.dumps(wal_entry), flags=0)
                     except Exception as e:
                         # no fatal; informativo en logs

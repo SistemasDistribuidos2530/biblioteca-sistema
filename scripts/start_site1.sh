@@ -7,17 +7,30 @@ LOG_DIR="$ROOT_DIR/logs"
 PID_DIR="$ROOT_DIR/.pids"
 mkdir -p "$LOG_DIR" "$PID_DIR"
 
+# Cargar .env si existe (exporta variables)
+if [ -f "$ROOT_DIR/.env" ]; then
+  set -a
+  . "$ROOT_DIR/.env"
+  set +a
+fi
+
+# Forzar rol primary en esta sede (sin pisar otras variables de .env)
 export GA_ROLE=primary
+
+# Enlaces y binds (respetan .env si estaba definido)
 export GC_REP_BIND=${GC_REP_BIND:-tcp://0.0.0.0:5555}
 export GC_PUB_BIND=${GC_PUB_BIND:-tcp://0.0.0.0:5556}
 export GC_ACTOR_PRESTAMO=${GC_ACTOR_PRESTAMO:-tcp://localhost:5560}
 export GA_PRIMARY_BIND=${GA_PRIMARY_BIND:-tcp://0.0.0.0:6000}
 export GA_SECONDARY_BIND=${GA_SECONDARY_BIND:-tcp://0.0.0.0:6001}
+export GA_REPL_PUSH_ADDR=${GA_REPL_PUSH_ADDR:-tcp://10.43.102.248:7001}
+
 # Direcciones que usará el monitor_failover en M1
 export GA_PRIMARY_ADDR=${GA_PRIMARY_ADDR:-tcp://localhost:6000}
 export GA_SECONDARY_ADDR=${GA_SECONDARY_ADDR:-tcp://10.43.102.248:6001}
 
 echo "== Iniciando SEDE 1 (Primary) =="
+echo "[INFO] GA_REPL_PUSH_ADDR=$GA_REPL_PUSH_ADDR"
 
 python3 scripts/generate_db.py --seed 42 > "$LOG_DIR/generate_db.log" 2>&1 || true
 
