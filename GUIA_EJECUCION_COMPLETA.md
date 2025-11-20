@@ -190,37 +190,29 @@ tail -f logs/monitor_failover.log
 
 ### 2.4. Generar Carga de Prueba (M3)
 
-**Objetivo:** Enviar solicitudes para verificar que el sistema procesa operaciones y replica a M2.
+**Objetivo:** Enviar solicitudes para verificar que el sistema procesa operaciones (incluyendo PRÉSTAMOS) y replica a M2.
 
 **Terminal M3-T1:**
 ```bash
 cd ~/biblioteca-clientes
 
-# Generar carga de prueba: 2 PS con 10 solicitudes cada uno
-python3 pruebas/multi_ps.py --num-ps 2 --requests-per-ps 10 --mix 50:50:0
+# Generar y lanzar 2 PS con mezcla que incluye préstamos (20%)
+python3 pruebas/multi_ps.py --num-ps 2 --requests-per-ps 10 --mix 40:40:20
 ```
 
-**Salida esperada:**
-```
-========================================================================
-                 LANZADOR DE MÚLTIPLES PS CONCURRENTES                  
-========================================================================
-
-[...] PS lanzados         : 2
-[...] PS exitosos         : 2
-[...] Total solicitudes   : 20
+**Verificar presencia de préstamos:**
+```bash
+grep -c 'operation=prestamo' multi_ps_logs/ps_logs_consolidado.txt
 ```
 
 ---
 
 ### 2.5. Verificar Procesamiento en Tiempo Real
 
-**Terminal M1-T3 (nueva terminal - Logs de Actores):**
+**Terminal M1-T3 (nueva terminal - Logs de Actores Renovación):**
 ```bash
 cd ~/ProyectoDistribuidos/biblioteca-sistema
-
-# Ver procesamiento de renovaciones
-tail -f logs/actor_renovacion.log | grep -E 'RENOVACIÓN PROCESADA|book_code'
+tail -f logs/log_actor_renovacion.txt | grep -E 'RENOVACIÓN PROCESADA|Libro'
 ```
 
 **Esperado:** Verás bloques como:
@@ -234,19 +226,24 @@ tail -f logs/actor_renovacion.log | grep -E 'RENOVACIÓN PROCESADA|book_code'
   [...]
 ```
 
-**Terminal M1-T4 (nueva terminal - Replicación):**
+**Terminal M1-T4 (nueva terminal - Logs Actor Préstamo):**
 ```bash
 cd ~/ProyectoDistribuidos/biblioteca-sistema
-tail -f logs/ga_primary.log | grep 'REPL SEND'
+tail -f logs/log_actor_prestamo.txt | grep -E 'PRÉSTAMO PROCESADO|Libro'
 ```
 
-**Esperado:**
+**Esperado:** Bloques:
 ```
-[TIMESTAMP] REPL SEND -> renovacion book=BOOK-XXX user=YY to tcp://10.43.102.248:7001
-[TIMESTAMP] REPL SEND -> devolucion book=BOOK-ZZZ user=WW to tcp://10.43.102.248:7001
+----------------------------------------------------------------------
+                          PRÉSTAMO PROCESADO
+----------------------------------------------------------------------
+  Operación   : prestamo
+  Usuario     : XX
+  Libro       : BOOK-YYY
+  GA respuesta: {"estado": "ok", ...}
 ```
 
-**Terminal M2-T2 (nueva terminal - Recepción Replicación):**
+**Terminal M2-T2 (Recepción Replicación + Aplicación):**
 ```bash
 cd ~/Desktop/DistribuidosProyecto/biblioteca-sistema
 tail -f logs/ga_secondary.log | grep -E 'REPL RECV|REPL APPLY'
@@ -256,6 +253,18 @@ tail -f logs/ga_secondary.log | grep -E 'REPL RECV|REPL APPLY'
 ```
 [TIMESTAMP] REPL RECV raw -> {"ts": "...", "op": {...}}
 [TIMESTAMP] REPL APPLY -> renovacion book=BOOK-XXX user=YY
+[TIMESTAMP] REPL RECV raw -> {"ts": "...", "op": {...}}
+[TIMESTAMP] REPL APPLY -> prestamo book=BOOK-YYY user=ZZ
+```
+
+---
+
+### Paso adicional: Métricas específicas de préstamos
+
+En M3:
+```bash
+python3 ps/log_parser.py --log multi_ps_logs/ps_logs_consolidado.txt --operation prestamo --csv experimentos/metricas_prestamo.csv
+cat experimentos/metricas_prestamo.csv
 ```
 
 ---
@@ -495,6 +504,7 @@ tail -f logs/ga_secondary.log | grep 'REP recibido'
 ```
 [TIMESTAMP] REP recibido: {"operacion": "renovacion", "book_code": "BOOK-XXX", ...}
 [TIMESTAMP] REP recibido: {"operacion": "devolucion", "book_code": "BOOK-YYY", ...}
+[TIMESTAMP] REP recibido: {"operacion": "prestamo", "book_code": "BOOK-ZZZ", ...}
 ```
 
 ---
@@ -622,7 +632,9 @@ cd ~/ProyectoDistribuidos/biblioteca-sistema
 python3 - <<'PY'
 import pickle
 db=pickle.load(open('gc/ga_db_primary.pkl','rb'))
-print("Primary BOOK-050:", db.get('BOOK-050',{}).get('available'))
+print(f"Total libros: {len(db)}")
+total_loans = sum(len(v.get('loans',{})) for v in db.values())
+print(f"Préstamos activos: {total_loans}")
 PY
 ```
 
@@ -632,7 +644,9 @@ cd ~/Desktop/DistribuidosProyecto/biblioteca-sistema
 python3 - <<'PY'
 import pickle
 db=pickle.load(open('gc/ga_db_secondary.pkl','rb'))
-print("Secondary BOOK-050:", db.get('BOOK-050',{}).get('available'))
+print(f"Total libros: {len(db)}")
+total_loans = sum(len(v.get('loans',{})) for v in db.values())
+print(f"Préstamos activos: {total_loans}")
 PY
 ```
 
@@ -1068,4 +1082,3 @@ bash scripts/stop_all.sh
 ---
 
 **¡Éxito en la demostración!** 🚀
-
