@@ -130,14 +130,6 @@ tail -20 evidencias_failover/actor_prestamo_POST.log
   - El GC es quien redirige al GA activo
   - Los actores solo ven mensajes, no cambios de infraestructura
 
-**Para el informe:**
-```
-"Los logs de actores muestran procesamiento continuo de mensajes antes,
-durante y después del failover, sin eventos de reconexión explícita.
-Esto confirma que la conmutación fue transparente para los actores,
-ya que su conexión es con el GC (PUB/SUB en :5556), no con el GA."
-```
-
 ---
 
 ### 4. Métricas de Impacto
@@ -156,15 +148,7 @@ ERROR: 3
 Tasa de éxito: 85%
 ```
 
-**Interpretación para el informe:**
-- Los TIMEOUT ocurren durante la ventana MTTD (~6-9 segundos típico)
-- Representa solicitudes que llegaron durante la conmutación
-- Tasa de éxito >80% indica recuperación efectiva
-- Los PS pueden reintentar los TIMEOUT (según su configuración)
-
----
-
-## 🔄 Repetir la Demo (si necesitas más evidencias)
+## 🔄 Repetir la Demo
 
 ### Paso 1: Reiniciar el GA primario
 ```bash
@@ -200,51 +184,6 @@ Puedes generar una tabla así con los datos capturados:
 | Solicitudes OK | `grep OK evidencias_failover/resumen_metricas.txt` | Métricas |
 | Solicitudes TIMEOUT | `grep TIMEOUT evidencias_failover/resumen_metricas.txt` | Métricas |
 | Tasa de éxito | `grep Tasa evidencias_failover/resumen_metricas.txt` | Calculado |
-
----
-
-## 🎬 Captura de Pantalla (opcional)
-
-Si quieres screenshots para el informe, ejecuta la demo con `script`:
-
-```bash
-script -c "bash scripts/failover_demo.sh" evidencias_failover/terminal_output.txt
-```
-
-Luego puedes copiar secciones del output al informe.
-
----
-
-## 🐛 Troubleshooting
-
-### "GA no está corriendo"
-```bash
-bash scripts/start_site1.sh
-sleep 5
-bash scripts/failover_demo.sh
-```
-
-### "No se detectó conmutación"
-- Verifica que el monitor esté corriendo: `pgrep -f monitor_failover`
-- Si no está, añádelo: `python3 gc/monitor_failover.py &`
-
-### "Pocos TIMEOUT capturados"
-- Es normal si MTTD es muy bajo (<3s)
-- Indica un sistema muy eficiente
-- Documentarlo como fortaleza
-
----
-
-## ✅ Checklist para el Informe
-
-- [ ] Ejecuté `failover_demo.sh`
-- [ ] Tengo `evidencias_failover/REPORTE_FAILOVER.md`
-- [ ] MTTD está capturado y es razonable (3-10s)
-- [ ] Los logs del monitor muestran conmutación
-- [ ] Los logs de actores muestran continuidad
-- [ ] Las métricas tienen OK y TIMEOUT
-- [ ] `ga_activo.txt` cambió de primary → secondary
-- [ ] Copié las secciones relevantes al informe
 
 ---
 
